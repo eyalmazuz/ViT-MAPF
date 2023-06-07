@@ -14,7 +14,9 @@ hparams = {
     "dim": 1024,
     "depth": 24,
     "heads": 16,
-    "mlp_dim": 4096
+    "mlp_dim": 4096,
+    "frame_patch_size": 2,
+    "temporal_depth": 6
 }
 
 seed_everything(42)
