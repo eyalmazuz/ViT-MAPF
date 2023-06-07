@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from vit_pytorch import SimpleViT
+from vit_pytorch.vivit import ViT as ViVit
 
 import wandb
 
@@ -147,8 +148,69 @@ def train_vit(df, split_type, images_path, hparams):
             run.log(train_metrics, commit=False)
             run.log(validation_metrics, commit=True)
 
-def train_vivit():
-    pass
+def train_vivit(df, split_type, images_path, hparams):
+    run = wandb.init(
+    # Set the project where this run will be logged
+    project="MAPF-ViT",
+    # Track hyperparameters and run metadata
+    tags=['ViViT'])
+
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    train_transforms = transforms.Compose(
+    [
+        transforms.Resize((hparams["image_size"], hparams["image_size"]), antialias=True),
+        transforms.Normalize(mean=[0, 0, 0, 0], std=[1, 1, 1, 1]),
+    ]
+    )
+
+    validation_transforms = transforms.Compose(
+        [
+            transforms.Resize((hparams["image_size"], hparams["image_size"]), antialias=True),
+            transforms.Normalize(mean=[0, 0, 0, 0], std=[1, 1, 1, 1]),
+        ]
+    )
+
+    for i, (train_df, test_df) in enumerate(get_split(df, split_type)):
+        train_data = MAPFDataset(images_path, train_df, transform=train_transforms)
+        val_data = MAPFDataset(images_path, test_df, transform=validation_transforms)
+
+        train_loader = DataLoader(dataset = train_data, batch_size=hparams["batch_size"], shuffle=True)
+        valid_loader = DataLoader(dataset = val_data, batch_size=hparams["batch_size"], shuffle=True)
+
+        model = ViVit(
+            image_size = hparams["image_size"],
+            image_patch_size = hparams["patch_size"],
+            num_classes = len(alg2label.keys()),
+            dim = hparams["dim"],
+            spatial_depth = hparams["depth"],
+            heads = hparams["heads"],
+            mlp_dim = hparams["mlp_dim"],
+            frames = 512,
+            frame_patch_size = hparams["frame_patch_size"],
+            temporal_depth = hparams["temporal_depth"],
+        ).to(device)
+
+        # loss function
+        criterion = nn.CrossEntropyLoss()
+        # optimizer
+        optimizer = optim.Adam(model.parameters(), lr=hparams["lr"])
+        # scheduler
+        # scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
+
+
+        for epoch in range(hparams["epochs"]):
+            train_metrics = train_one_epoch(model, criterion, optimizer, train_loader, device)
+
+            validation_metrics = validation_step(model, criterion, valid_loader, device)
+            
+
+            print(f"{train_metrics=}")
+            print(f"{validation_metrics=}")
+
+            run.log(train_metrics, commit=False)
+            run.log(validation_metrics, commit=True)
 
 
 def train_one_epoch(model, criterion, optimizer, train_loader, device):
