@@ -162,3 +162,4 @@ cython_debug/
 
 MovingAIData-labelled-with-features.csv
 data_map_start_goal_paths/
+data/

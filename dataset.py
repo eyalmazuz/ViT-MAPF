@@ -30,7 +30,7 @@ class MAPFDataset(Dataset):
         img = torch.from_numpy(np.load(img_path)['arr_0']).permute(2, 0, 1).to(torch.float32)
 
         if self.transform:
-            img_transformed = self.transform(img)
+            img = self.transform(img)
 
         *GridName, problem_type, InstanceId, NumOfAgents = img_path.split('/')[-1][:-4].split('-')
         
@@ -40,7 +40,7 @@ class MAPFDataset(Dataset):
         success_vector = self.df.loc[('-'.join(GridName), problem_type, int(InstanceId), int(NumOfAgents))][success_order].values.astype(np.int64)
         runtime_vector = self.df.loc[('-'.join(GridName), problem_type, int(InstanceId), int(NumOfAgents))][runtime_order].values.astype(np.int64)
         
-        return img_transformed, label, torch.from_numpy(success_vector), torch.from_numpy(runtime_vector)
+        return img, label, torch.from_numpy(success_vector), torch.from_numpy(runtime_vector)
 
 
 class XGBoostMAPFDataset(Dataset):
@@ -81,13 +81,23 @@ class ViViTMAPFDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
-        img_path = os.path.join(self.image_path, self.df.iloc[idx].path)
-        img = torch.from_numpy(np.load(img_path)['arr_0']).permute(2, 0, 1).to(torch.float32)
+        print(f"{self.df.iloc[idx].path=}")
+        print(f"{self.image_path=}")
+        video_path = os.path.join(self.image_path, self.df.iloc[idx].path)
+
+        video = torch.from_numpy(np.load(video_path)['arr_0']).permute(0, 3, 1, 2).to(torch.float32)
+
+        print(f"{video.shape=}")
 
         if self.transform:
-            img_transformed = self.transform(img)
+            video = torch.stack([self.transform(frame) for frame in video])
 
-        *GridName, problem_type, InstanceId, NumOfAgents = img_path.split('/')[-1][:-4].split('-')
+            print(f"{video.shape=}")
+            video = video.permute(1, 0, 2, 3)
+
+            print(f"{video.shape=}")
+
+        *GridName, problem_type, InstanceId, NumOfAgents = video_path.split('/')[-1][:-4].split('-')
         
         fastest_algorthim = self.df.loc[('-'.join(GridName), problem_type, int(InstanceId), int(NumOfAgents))].Y
         label = alg2label[fastest_algorthim]
@@ -95,11 +105,31 @@ class ViViTMAPFDataset(Dataset):
         success_vector = self.df.loc[('-'.join(GridName), problem_type, int(InstanceId), int(NumOfAgents))][success_order].values.astype(np.int64)
         runtime_vector = self.df.loc[('-'.join(GridName), problem_type, int(InstanceId), int(NumOfAgents))][runtime_order].values.astype(np.int64)
         
-        return img_transformed, label, torch.from_numpy(success_vector), torch.from_numpy(runtime_vector)
+        return video, label, torch.from_numpy(success_vector), torch.from_numpy(runtime_vector)
 
 
 def main():
-    pass
+    import os
+    import pandas as pd
+    from torchvision import transforms
+
+
+    images_path = './data'
+    df = pd.read_csv('./MovingAIData-labelled-with-features.csv')
+    df['path'] = df['GridName'] + '-' + df['problem_type'] + '-' + df['InstanceId'].astype(str) + '-' + df['NumOfAgents'].astype(str) + '.npz'
+
+    transforms = transforms.Compose(
+    [
+        transforms.Resize((256, 256), antialias=True),
+        transforms.Normalize(mean=[0, 0, 0], std=[1, 1, 1]),
+    ]
+    )
+
+    dataset = ViViTMAPFDataset(images_path, df, transforms)
+
+    video, label, successes, runtimes = dataset[20]
+
+    print(video.shape, label)
 
 if __name__ == "__main__":
     main() 
