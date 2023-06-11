@@ -161,14 +161,14 @@ def train_vivit(df, split_type, images_path, hparams):
     train_transforms = transforms.Compose(
     [
         transforms.Resize((hparams["image_size"], hparams["image_size"]), antialias=True),
-        transforms.Normalize(mean=[0, 0, 0, 0], std=[1, 1, 1, 1]),
+        transforms.Normalize(mean=[0, 0, 0], std=[1, 1, 1]),
     ]
     )
 
     validation_transforms = transforms.Compose(
         [
             transforms.Resize((hparams["image_size"], hparams["image_size"]), antialias=True),
-            transforms.Normalize(mean=[0, 0, 0, 0], std=[1, 1, 1, 1]),
+            transforms.Normalize(mean=[0, 0, 0], std=[1, 1, 1]),
         ]
     )
 

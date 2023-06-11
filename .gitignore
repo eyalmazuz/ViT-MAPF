@@ -166,3 +166,4 @@ data_frames_map_paths_start_goal/
 data_frames_map_paths_start_goal_agg/
 data_map_start_goal/
 wandb/
+data/
