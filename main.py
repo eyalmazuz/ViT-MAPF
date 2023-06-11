@@ -5,16 +5,16 @@ from utils import seed_everything
 
 # Training settings
 hparams = {
-    "batch_size": 128,
-    "epochs": 20,
+    "batch_size": 512,
+    "epochs": 5,
     "lr": 3e-5,
     "gamma": 0.7,
     "image_size": 256,
-    "patch_size": 32,
-    "dim": 1024,
-    "depth": 24,
-    "heads": 16,
-    "mlp_dim": 4096,
+    "patch_size": 16,
+    "dim": 64,
+    "depth": 2,
+    "heads": 8,
+    "mlp_dim": 128,
     "frame_patch_size": 2,
     "temporal_depth": 6
 }

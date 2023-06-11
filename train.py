@@ -115,8 +115,8 @@ def train_vit(df, split_type, images_path, hparams):
         train_data = MAPFDataset(images_path, train_df, transform=train_transforms)
         val_data = MAPFDataset(images_path, test_df, transform=validation_transforms)
 
-        train_loader = DataLoader(dataset = train_data, batch_size=hparams["batch_size"], shuffle=True)
-        valid_loader = DataLoader(dataset = val_data, batch_size=hparams["batch_size"], shuffle=True)
+        train_loader = DataLoader(dataset = train_data, batch_size=hparams["batch_size"], shuffle=True, num_workers=8)
+        valid_loader = DataLoader(dataset = val_data, batch_size=hparams["batch_size"], shuffle=True, num_workers=8)
 
         model = SimpleViT(
             image_size = hparams["image_size"],
@@ -219,6 +219,8 @@ def train_one_epoch(model, criterion, optimizer, train_loader, device):
     epoch_coverage = 0
     epoch_coverage_runtime = 0
 
+    model.train()
+
     for data, labels, successes, runtimes in tqdm(train_loader):
         data = data.to(device)
         labels = labels.to(device)
@@ -252,6 +254,7 @@ def train_one_epoch(model, criterion, optimizer, train_loader, device):
 
 
 def validation_step(model, criterion, valid_loader, device):
+    model.eval()
     with torch.no_grad():
         epoch_val_accuracy = 0
         epoch_val_coverage = 0
@@ -259,7 +262,7 @@ def validation_step(model, criterion, valid_loader, device):
         epoch_val_loss = 0
 
 
-        for data, labels, successes, runtimes in valid_loader:
+        for data, labels, successes, runtimes in tqdm(valid_loader, leave=False):
             data = data.to(device)
             labels = labels.to(device)
             successes = successes.to(device)
