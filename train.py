@@ -12,13 +12,15 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from torch.cuda import amp
+torch.backends.cudnn.benchmark = True
 
 from vit_pytorch import SimpleViT
 from vit_pytorch.vivit import ViT as ViVit
 
 import wandb
 
-from dataset import MAPFDataset
+from dataset import MAPFDataset, ViViTMAPFDataset
 
 from utils import calc_coverage, calc_coverage_runtime, calc_fastest, get_split, seed_everything
 
@@ -173,11 +175,11 @@ def train_vivit(df, split_type, images_path, hparams):
     )
 
     for i, (train_df, test_df) in enumerate(get_split(df, split_type)):
-        train_data = MAPFDataset(images_path, train_df, transform=train_transforms)
-        val_data = MAPFDataset(images_path, test_df, transform=validation_transforms)
+        train_data = ViViTMAPFDataset(images_path, train_df, transform=train_transforms)
+        val_data = ViViTMAPFDataset(images_path, test_df, transform=validation_transforms)
 
-        train_loader = DataLoader(dataset = train_data, batch_size=hparams["batch_size"], shuffle=True)
-        valid_loader = DataLoader(dataset = val_data, batch_size=hparams["batch_size"], shuffle=True)
+        train_loader = DataLoader(dataset = train_data, batch_size=1, shuffle=True)
+        valid_loader = DataLoader(dataset = val_data, batch_size=1, shuffle=True)
 
         model = ViVit(
             image_size = hparams["image_size"],
@@ -198,13 +200,13 @@ def train_vivit(df, split_type, images_path, hparams):
         optimizer = optim.Adam(model.parameters(), lr=hparams["lr"])
         # scheduler
         # scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
+        scaler = amp.GradScaler()
 
 
         for epoch in range(hparams["epochs"]):
-            train_metrics = train_one_epoch(model, criterion, optimizer, train_loader, device)
+            train_metrics = train_one_epoch(model, criterion, optimizer, scaler, train_loader, device, accumulation_steps=hparams["batch_size"])
 
             validation_metrics = validation_step(model, criterion, valid_loader, device)
-            
 
             print(f"{train_metrics=}")
             print(f"{validation_metrics=}")
@@ -213,7 +215,7 @@ def train_vivit(df, split_type, images_path, hparams):
             run.log(validation_metrics, commit=True)
 
 
-def train_one_epoch(model, criterion, optimizer, train_loader, device):
+def train_one_epoch(model, criterion, optimizer, scaler, train_loader, device, accumulation_steps=1):
     epoch_loss = 0
     epoch_accuracy = 0
     epoch_coverage = 0
@@ -221,18 +223,34 @@ def train_one_epoch(model, criterion, optimizer, train_loader, device):
 
     model.train()
 
-    for data, labels, successes, runtimes in tqdm(train_loader):
+    for idx, (data, labels, successes, runtimes) in tqdm(enumerate(train_loader)):
         data = data.to(device)
         labels = labels.to(device)
         successes = successes.to(device)
         runtimes = runtimes.to(device)
 
-        output = model(data)
-        loss = criterion(output, labels)
+        with amp.autocast():
+            output = model(data)
+            loss = criterion(output, labels)
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            # Normalize the Gradients
+            loss = loss / accumulation_steps
+
+        scaler.scale(loss).backward()
+
+
+        if ((idx + 1) % accumulation_steps == 0) or (idx + 1 == len(train_loader)):
+
+            # Unscales the gradients of optimizer's assigned params in-place
+            scaler.unscale_(optimizer)
+
+            # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
+
 
         epoch_loss += loss / len(train_loader) 
 
@@ -267,9 +285,10 @@ def validation_step(model, criterion, valid_loader, device):
             labels = labels.to(device)
             successes = successes.to(device)
             runtimes = runtimes.to(device)
-
-            val_output = model(data)
-            val_loss = criterion(val_output, labels)
+            
+            with amp.autocast():
+                val_output = model(data)
+                val_loss = criterion(val_output, labels)
 
             epoch_val_loss += val_loss / len(valid_loader) 
 

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from train import train_xgb, train_vit
+from train import train_xgb, train_vit, train_vivit
 from utils import seed_everything
 
 # Training settings
@@ -15,13 +15,13 @@ hparams = {
     "depth": 2,
     "heads": 8,
     "mlp_dim": 128,
-    "frame_patch_size": 2,
+    "frame_patch_size": 1,
     "temporal_depth": 6
 }
 
 seed_everything(42)
 
-images_path = "./data_map_start_goal_paths"
+images_path = "./data_frames_map_paths_start_goal"
 
 df = pd.read_csv("./MovingAIData-labelled-with-features.csv",) # usecols=['GridName', 'InstanceId', 'problem_type', 'NumOfAgents', 'Y',
                                                                     #   'sat Success', 'icts Success', 'cbsh-c Success', 'lazycbs Success', 'epea Success',
@@ -30,4 +30,5 @@ df = pd.read_csv("./MovingAIData-labelled-with-features.csv",) # usecols=['GridN
 df['path'] = df['GridName'] + '-' + df['problem_type'] + '-' + df['InstanceId'].astype(str) + '-' + df['NumOfAgents'].astype(str) + '.npz'
 
 # train_xgb(df, 'map_type')
-train_vit(df, "map_type", images_path, hparams)
+# train_vit(df, "map_type", images_path, hparams)
+train_vivit(df, 'map_type', images_path, hparams)

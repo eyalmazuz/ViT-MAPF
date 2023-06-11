@@ -81,21 +81,21 @@ class ViViTMAPFDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx):
-        print(f"{self.df.iloc[idx].path=}")
-        print(f"{self.image_path=}")
+        # print(f"{self.df.iloc[idx].path=}")
+        # print(f"{self.image_path=}")
         video_path = os.path.join(self.image_path, self.df.iloc[idx].path)
 
         video = torch.from_numpy(np.load(video_path)['arr_0']).permute(0, 3, 1, 2).to(torch.float32)
 
-        print(f"{video.shape=}")
+        # print(f"{video.shape=}")
 
         if self.transform:
             video = torch.stack([self.transform(frame) for frame in video])
 
-            print(f"{video.shape=}")
+            # print(f"{video.shape=}")
             video = video.permute(1, 0, 2, 3)
 
-            print(f"{video.shape=}")
+            # print(f"{video.shape=}")
 
         *GridName, problem_type, InstanceId, NumOfAgents = video_path.split('/')[-1][:-4].split('-')
         
