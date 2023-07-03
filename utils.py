@@ -3,6 +3,7 @@ import random
 
 import numpy as np
 from sklearn.model_selection import RepeatedKFold
+from sklearn.model_selection import train_test_split
 import torch
 
 
@@ -37,6 +38,13 @@ def get_random_split(df):
         test_df = df.iloc[test_index]
 
         yield train_df, test_df
+        
+
+def get_stratified_random_split(df):
+    train_df, test_df = train_test_split(df, test_size=0.25, random_state=42, stratify= df['Y'])
+    
+    yield train_df, test_df
+    
 
 
 def get_map_type_split(df, n=2):
@@ -66,7 +74,7 @@ def get_grid_name_split(df, n=5):
 
 def get_split(df, split_type: str):
     if split_type == 'random':
-        return get_random_split(df)
+        return get_stratified_random_split(df)
     
     elif split_type == 'map_type':
         return get_map_type_split(df)

@@ -59,9 +59,9 @@ def train_xgb(df, split_type):
     covs = []
     runs = []
     for i, (train_df, test_df) in enumerate(get_split(df, split_type)):
-        clf = XGBClassifier(objective='multi:softmax', n_jobs=-1, )
-                            # callbacks=[WandbCallback(log_model=True,
-                            #                          log_feature_importance=True)])
+        clf = XGBClassifier(objective='multi:softmax', n_jobs=-1,
+                            callbacks=[WandbCallback(log_model=True,
+                                                     log_feature_importance=True)])
 
         train_df.Y = train_df.Y.apply(lambda alg: alg2label[alg])
         test_df.Y = test_df.Y.apply(lambda alg: alg2label[alg])
@@ -136,10 +136,10 @@ def train_vit(df, split_type, images_path, hparams):
         optimizer = optim.Adam(model.parameters(), lr=hparams["lr"])
         # scheduler
         # scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
-
+        scaler = amp.GradScaler()
 
         for epoch in range(hparams["epochs"]):
-            train_metrics = train_one_epoch(model, criterion, optimizer, train_loader, device)
+            train_metrics = train_one_epoch(model, criterion, optimizer, scaler, train_loader, device)
 
             validation_metrics = validation_step(model, criterion, valid_loader, device)
             
