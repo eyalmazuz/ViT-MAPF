@@ -47,17 +47,33 @@ def get_stratified_random_split(df):
     
 
 
-def get_map_type_split(df, n=2):
-    map_types = df.maptype.unique()
-    random.shuffle(map_types)
+def get_map_type_split(df, n=1, test_set_number=None):
+    map_types = df.maptype.unique().tolist()
+    # random.shuffle(map_types)
 
     splits = [map_types[i:i+n] for i in range(0, len(map_types), n)]
+    print(splits)
+    print(f"test_set_number={test_set_number}")
 
-    for split in splits:
-        train_df = df[df.maptype.isin(split)]
-        test_df = df[~df.maptype.isin(split)]
+    if test_set_number is not None:
+        print(f'using split {splits[test_set_number]}')
+        train_df = df[~df.maptype.isin(splits[test_set_number])]
+        test_df = df[df.maptype.isin(splits[test_set_number])]
 
-        yield train_df, test_df
+        print(f'train_df.maptype.unique()={train_df.maptype.unique()}')
+        print(f'test_df.maptype.unique()={test_df.maptype.unique()}')
+
+        yield train_df, test_df, splits[test_set_number]
+
+    else:
+        for split in splits:
+            train_df = df[~df.maptype.isin(split)]
+            test_df = df[df.maptype.isin(split)]
+
+            print(f'train_df.maptype.unique()={train_df.maptype.unique()}')
+            print(f'test_df.maptype.unique()={test_df.maptype.unique()}')
+
+            yield train_df, test_df
 
 def get_grid_name_split(df, n=5):
     grid_names = df.GridName.unique()
@@ -66,18 +82,18 @@ def get_grid_name_split(df, n=5):
     splits = [grid_names[i:i+n] for i in range(0, len(grid_names), n)]
 
     for split in splits:
-        train_df = df[df.GridName.isin(split)]
-        test_df = df[~df.GridName.isin(split)]
+        train_df = df[~df.GridName.isin(split)]
+        test_df = df[df.GridName.isin(split)]
 
         yield train_df, test_df
 
 
-def get_split(df, split_type: str):
+def get_split(df, split_type: str, test_set_number=None):
     if split_type == 'random':
         return get_stratified_random_split(df)
     
     elif split_type == 'map_type':
-        return get_map_type_split(df)
+        return get_map_type_split(df, test_set_number=test_set_number)
 
     elif split_type == 'grid_name':
         return get_grid_name_split(df)

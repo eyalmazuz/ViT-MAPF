@@ -89,7 +89,7 @@ def train_xgb(df, split_type):
     run.summary['coverage_runtime'] = np.array(runs)
         
 
-def train_vit(df, split_type, images_path, hparams):
+def train_vit(df, split_type, images_path, hparams, test_set_number=None):
     run = wandb.init(
     # Set the project where this run will be logged
     project="MAPF-ViT",
@@ -113,12 +113,18 @@ def train_vit(df, split_type, images_path, hparams):
         ]
     )
 
-    for i, (train_df, test_df) in enumerate(get_split(df, split_type)):
+    for i, (train_df, test_df, name) in enumerate(get_split(df, split_type, test_set_number)):
         train_data = MAPFDataset(images_path, train_df, transform=train_transforms)
         val_data = MAPFDataset(images_path, test_df, transform=validation_transforms)
 
         train_loader = DataLoader(dataset = train_data, batch_size=hparams["batch_size"], shuffle=True, num_workers=8)
-        valid_loader = DataLoader(dataset = val_data, batch_size=hparams["batch_size"], shuffle=True, num_workers=8)
+        valid_loader = DataLoader(dataset = val_data, batch_size=hparams["batch_size"], shuffle=False, num_workers=8)
+
+        run.tags  = run.tags + (name[0], images_path.split('/')[-1])
+        print(f'train data len: {len(train_data)}')
+        print(f'test data len: {len(val_data)}')
+        print(f'train loader len: {len(train_loader)}')
+        print(f'test loader len: {len(valid_loader)}')
 
         model = SimpleViT(
             image_size = hparams["image_size"],
@@ -130,16 +136,18 @@ def train_vit(df, split_type, images_path, hparams):
             mlp_dim = hparams["mlp_dim"]
         ).to(device)
 
+        model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f'ViT parameters: {model_params}')
+
         # loss function
         criterion = nn.CrossEntropyLoss()
         # optimizer
         optimizer = optim.Adam(model.parameters(), lr=hparams["lr"])
         # scheduler
         # scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
-        scaler = amp.GradScaler()
 
         for epoch in range(hparams["epochs"]):
-            train_metrics = train_one_epoch(model, criterion, optimizer, scaler, train_loader, device)
+            train_metrics = train_one_epoch(model, criterion, optimizer, train_loader, device)
 
             validation_metrics = validation_step(model, criterion, valid_loader, device)
             
@@ -150,7 +158,7 @@ def train_vit(df, split_type, images_path, hparams):
             run.log(train_metrics, commit=False)
             run.log(validation_metrics, commit=True)
 
-def train_vivit(df, split_type, images_path, hparams):
+def train_vivit(df, split_type, images_path, hparams, test_set_number=None):
     run = wandb.init(
     # Set the project where this run will be logged
     project="MAPF-ViT",
@@ -174,12 +182,20 @@ def train_vivit(df, split_type, images_path, hparams):
         ]
     )
 
-    for i, (train_df, test_df) in enumerate(get_split(df, split_type)):
+    for i, (train_df, test_df, name) in enumerate(get_split(df, split_type, test_set_number)):
         train_data = ViViTMAPFDataset(images_path, train_df, transform=train_transforms)
         val_data = ViViTMAPFDataset(images_path, test_df, transform=validation_transforms)
 
-        train_loader = DataLoader(dataset = train_data, batch_size=1, shuffle=True)
-        valid_loader = DataLoader(dataset = val_data, batch_size=1, shuffle=True)
+        train_loader = DataLoader(dataset=train_data, batch_size=1, shuffle=True)
+        valid_loader = DataLoader(dataset=val_data, batch_size=1, shuffle=False)
+
+        run.tags  = run.tags + (name[0], images_path.split('/')[-1])
+
+        print(f'train data len: {len(train_data)}')
+        print(f'test data len: {len(val_data)}')
+        print(f'train loader len: {len(train_loader)}')
+        print(f'test loader len: {len(valid_loader)}')
+
 
         model = ViVit(
             image_size = hparams["image_size"],
@@ -194,17 +210,18 @@ def train_vivit(df, split_type, images_path, hparams):
             temporal_depth = hparams["temporal_depth"],
         ).to(device)
 
+        model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f'ViViT parameters: {model_params}')
+
         # loss function
         criterion = nn.CrossEntropyLoss()
         # optimizer
         optimizer = optim.Adam(model.parameters(), lr=hparams["lr"])
         # scheduler
         # scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
-        scaler = amp.GradScaler()
-
 
         for epoch in range(hparams["epochs"]):
-            train_metrics = train_one_epoch(model, criterion, optimizer, scaler, train_loader, device, accumulation_steps=hparams["batch_size"])
+            train_metrics = train_one_epoch(model, criterion, optimizer, train_loader, device, accumulation_steps=hparams["batch_size"])
 
             validation_metrics = validation_step(model, criterion, valid_loader, device)
 
@@ -215,7 +232,7 @@ def train_vivit(df, split_type, images_path, hparams):
             run.log(validation_metrics, commit=True)
 
 
-def train_one_epoch(model, criterion, optimizer, scaler, train_loader, device, accumulation_steps=1):
+def train_one_epoch(model, criterion, optimizer, train_loader, device, accumulation_steps=1):
     epoch_loss = 0
     epoch_accuracy = 0
     epoch_coverage = 0
@@ -229,26 +246,26 @@ def train_one_epoch(model, criterion, optimizer, scaler, train_loader, device, a
         successes = successes.to(device)
         runtimes = runtimes.to(device)
 
-        with amp.autocast():
-            output = model(data)
-            loss = criterion(output, labels)
+        output = model(data)
+        loss = criterion(output, labels)
 
-            # Normalize the Gradients
-            loss = loss / accumulation_steps
+        # Normalize the Gradients
+        loss = loss / accumulation_steps
 
-        scaler.scale(loss).backward()
-
+        # scaler.scale(loss).backward()
+        loss.backward()
 
         if ((idx + 1) % accumulation_steps == 0) or (idx + 1 == len(train_loader)):
 
             # Unscales the gradients of optimizer's assigned params in-place
-            scaler.unscale_(optimizer)
+            # scaler.unscale_(optimizer)
 
             # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
 
-            scaler.step(optimizer)
-            scaler.update()
+            # scaler.step(optimizer)
+            # scaler.update()
+            optimizer.step()
             optimizer.zero_grad()
 
 
