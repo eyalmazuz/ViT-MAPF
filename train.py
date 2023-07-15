@@ -33,7 +33,7 @@ alg2label = {
 }
 
 
-def train_xgb(df, split_type):
+def train_xgb(df, split_type, test_set_number=None):
 
     run = wandb.init(
     # Set the project where this run will be logged
@@ -58,10 +58,12 @@ def train_xgb(df, split_type):
     accs = []
     covs = []
     runs = []
-    for i, (train_df, test_df) in enumerate(get_split(df, split_type)):
+    for i, (train_df, test_df, name) in enumerate(get_split(df, split_type, test_set_number)):
         clf = XGBClassifier(objective='multi:softmax', n_jobs=-1,
                             callbacks=[WandbCallback(log_model=True,
                                                      log_feature_importance=True)])
+
+        run.tags  = run.tags + (name[0], )
 
         train_df.Y = train_df.Y.apply(lambda alg: alg2label[alg])
         test_df.Y = test_df.Y.apply(lambda alg: alg2label[alg])
@@ -77,11 +79,11 @@ def train_xgb(df, split_type):
         covs.append(coverage)
         runs.append(coverage_runtime)
 
-        run.log({
+    run.log({
         "eval/accuracy": accuracy,
         "eval/coverage": coverage,
         "eval/coverage runtime": coverage_runtime,
-        })
+    })
 
 
     run.summary['accuracy'] = np.array(accs)

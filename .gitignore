@@ -167,5 +167,6 @@ data_frames_map_paths_start_goal_agg/
 data_map_start_goal/
 wandb/
 data/
-jobs/
 sbatch_gpu.example
+sbatch_cpu.example
+jobs/

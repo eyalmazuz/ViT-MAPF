@@ -38,6 +38,6 @@ df = pd.read_csv("/sise/bshapira-group/mazuze-davidyu/ViT-MAPF/MovingAIData-labe
 
 df['path'] = df['GridName'] + '-' + df['problem_type'] + '-' + df['InstanceId'].astype(str) + '-' + df['NumOfAgents'].astype(str) + '.npz'
 
-#train_xgb(df, 'random')
+train_xgb(df, 'map_type', test_set_number=test_set_number)
 # train_vit(df, "map_type", images_path, hparams, test_set_number=test_set_number)
-train_vivit(df, 'map_type', images_path, hparams, test_set_number=test_set_number)
+# train_vivit(df, 'map_type', images_path, hparams, test_set_number=test_set_number)
