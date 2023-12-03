@@ -138,7 +138,7 @@ def train_ensemble(df, split_type, images_path, hparams, test_set_number):
         test_df.Y = test_df.Y.apply(lambda alg: alg2label[alg])
         clf.fit(train_df[feature_columns], train_df.Y)
 
-        preds = torch.from_numpy(clf.predict_proba(test_df[feature_columns]))
+        xgb_preds = torch.from_numpy(clf.predict_proba(test_df[feature_columns]))
 
         # Train ViT model
 
@@ -177,7 +177,7 @@ def train_ensemble(df, split_type, images_path, hparams, test_set_number):
         for epoch in range(hparams["epochs"]):
             train_metrics = train_one_epoch(model, criterion, optimizer, train_loader, device)
 
-            validation_metrics = ensemble_validation_step(model, criterion, valid_loader, device)
+            validation_metrics = ensemble_validation_step(model, criterion, valid_loader, device, xgb_preds)
             
 
             print(f"{train_metrics=}")
@@ -442,7 +442,7 @@ def validation_step(model, criterion, valid_loader, device):
         "eval/loss": epoch_val_loss
     }
 
-def ensemble_validation_step(model, criterion, valid_loader, device, xgboost_preds):
+def ensemble_validation_step(model, criterion, valid_loader, device, xgb_preds):
     model.eval()
     with torch.no_grad():
         epoch_val_accuracy = 0
@@ -472,7 +472,7 @@ def ensemble_validation_step(model, criterion, valid_loader, device, xgboost_pre
             successes.append(success.cpu().numpy().tolist())
             runtimes.append(runtime.cpu().numpy().tolist())
 
-        emsemble_preds = (xgboost_preds + torch.tensor(preds)) / 2
+        emsemble_preds = (xgb_preds + torch.tensor(preds)) / 2
         labels = torch.tensor(labels)
         successes = torch.tensor(successes)
         runtimes = torch.tensor(runtimes)
