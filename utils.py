@@ -41,7 +41,7 @@ def get_random_split(df):
         
 
 def get_stratified_random_split(df):
-    train_df, test_df = train_test_split(df, test_size=0.25, random_state=42, stratify= df['Y'])
+    train_df, test_df = train_test_split(df, test_size=0.25, random_state=42, stratify=df['Y'])
     
     yield train_df, test_df
     
