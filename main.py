@@ -2,7 +2,7 @@ import os
 import sys
 import pandas as pd
 
-from train import train_xgb, train_vit, train_vivit
+from train import train_xgb, train_vit, train_vivit, train_ensemble
 from utils import seed_everything
 
 if 'SLURM_ARRAY_TASK_ID' in os.environ:
@@ -29,8 +29,10 @@ hparams = {
 seed_everything(42)
 
 images_path = "/sise/bshapira-group/mazuze-davidyu/ViT-MAPF/data_frames_map_paths_start_goal_agg"
-
+# images_path = "./custom_mapf_images_all_paths"
 df = pd.read_csv("/sise/bshapira-group/mazuze-davidyu/ViT-MAPF/MovingAIData-labelled-with-features.csv",)
+# df = pd.read_csv("./MovingAIData-labelled-with-features.csv")
+
 
 # df['GridColumns'] = 256
 # df['GridRows'] = 256
@@ -38,6 +40,12 @@ df = pd.read_csv("/sise/bshapira-group/mazuze-davidyu/ViT-MAPF/MovingAIData-labe
 
 df['path'] = df['GridName'] + '-' + df['problem_type'] + '-' + df['InstanceId'].astype(str) + '-' + df['NumOfAgents'].astype(str) + '.npz'
 
-train_xgb(df, 'map_type', test_set_number=test_set_number)
+print(df.shape)
+ex = os.listdir(images_path)
+df = df[df.path.isin(ex)]
+
+print(df.shape)
+# train_xgb(df, 'map_type', test_set_number=test_set_number)
 # train_vit(df, "map_type", images_path, hparams, test_set_number=test_set_number)
 # train_vivit(df, 'map_type', images_path, hparams, test_set_number=test_set_number)
+train_ensemble(df, 'map_type', images_path, hparams, test_set_number=test_set_number)

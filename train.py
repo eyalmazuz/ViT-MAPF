@@ -134,11 +134,13 @@ def train_ensemble(df, split_type, images_path, hparams, test_set_number):
 
         run.tags  = run.tags + (name[0], )
 
-        train_df.Y = train_df.Y.apply(lambda alg: alg2label[alg])
-        test_df.Y = test_df.Y.apply(lambda alg: alg2label[alg])
-        clf.fit(train_df[feature_columns], train_df.Y)
+        xgb_train = train_df.copy()
+        xgb_test = test_df.copy()
+        xgb_train.Y = xgb_train.Y.apply(lambda alg: alg2label[alg])
+        xgb_test.Y = xgb_test.Y.apply(lambda alg: alg2label[alg])
+        clf.fit(xgb_train[feature_columns], xgb_train.Y)
 
-        xgb_preds = torch.from_numpy(clf.predict_proba(test_df[feature_columns]))
+        xgb_preds = torch.from_numpy(clf.predict_proba(xgb_test[feature_columns]))
 
         # Train ViT model
 
@@ -187,19 +189,19 @@ def train_ensemble(df, split_type, images_path, hparams, test_set_number):
             run.log(validation_metrics, commit=True)
 
         
-        accuracy = calc_fastest(preds, torch.tensor(test_df.Y.tolist()))
-        coverage = calc_coverage(preds, torch.from_numpy(test_df.loc[:, success_order].values.astype(np.int64)))
-        coverage_runtime = calc_coverage_runtime(preds, torch.from_numpy(test_df.loc[:, runtime_order].values.astype(np.int64)))
-        
-        accs.append(accuracy)
-        covs.append(coverage)
-        runs.append(coverage_runtime)
-
-    run.log({
-        "eval/accuracy": accuracy,
-        "eval/coverage": coverage,
-        "eval/coverage runtime": coverage_runtime,
-    })
+#         accuracy = calc_fastest(preds, torch.tensor(test_df.Y.tolist()))
+#         coverage = calc_coverage(preds, torch.from_numpy(test_df.loc[:, success_order].values.astype(np.int64)))
+#         coverage_runtime = calc_coverage_runtime(preds, torch.from_numpy(test_df.loc[:, runtime_order].values.astype(np.int64)))
+#
+#         accs.append(accuracy)
+#         covs.append(coverage)
+#         runs.append(coverage_runtime)
+#
+#     run.log({
+#         "eval/accuracy": accuracy,
+#         "eval/coverage": coverage,
+#         "eval/coverage runtime": coverage_runtime,
+#     })
 
 
     run.summary['accuracy'] = np.array(accs)
@@ -413,7 +415,6 @@ def validation_step(model, criterion, valid_loader, device):
         epoch_val_coverage_runtime = 0
         epoch_val_loss = 0
 
-
         for data, labels, successes, runtimes in tqdm(valid_loader, leave=False):
             data = data.to(device)
             labels = labels.to(device)
@@ -450,7 +451,6 @@ def ensemble_validation_step(model, criterion, valid_loader, device, xgb_preds):
         epoch_val_coverage_runtime = 0
         epoch_val_loss = 0
 
-
         preds = []
         labels = []
         successes = []
@@ -463,19 +463,19 @@ def ensemble_validation_step(model, criterion, valid_loader, device, xgb_preds):
             
             with amp.autocast():
                 val_output = model(data)
-                val_loss = criterion(val_output, labels)
+                val_loss = criterion(val_output, label)
 
             epoch_val_loss += val_loss / len(valid_loader) 
             
-            preds.append(val_output.cpu().numpy().tolist())
-            labels.append(label.cpu().numpy().tolist())
-            successes.append(success.cpu().numpy().tolist())
-            runtimes.append(runtime.cpu().numpy().tolist())
+            preds.append(val_output.cpu())
+            labels.append(label.cpu())
+            successes.append(success.cpu())
+            runtimes.append(runtime.cpu())
 
-        emsemble_preds = (xgb_preds + torch.tensor(preds)) / 2
-        labels = torch.tensor(labels)
-        successes = torch.tensor(successes)
-        runtimes = torch.tensor(runtimes)
+        ensemble_preds = (xgb_preds + torch.vstack(preds)) / 2
+        labels = torch.cat(labels)
+        successes = torch.cat(successes)
+        runtimes = torch.cat(runtimes)
 
         fastest_accuracy = calc_fastest(ensemble_preds, labels)
         epoch_val_accuracy = fastest_accuracy
