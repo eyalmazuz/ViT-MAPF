@@ -2,7 +2,7 @@ import os
 import sys
 import pandas as pd
 
-from train import train_xgb, train_vit, train_vivit, train_ensemble
+from train import train_xgb, train_vit, train_vivit, train_vit_ensemble, train_vivit_ensemble
 from utils import seed_everything
 
 if 'SLURM_ARRAY_TASK_ID' in os.environ:
@@ -48,4 +48,5 @@ print(df.shape)
 # train_xgb(df, 'map_type', test_set_number=test_set_number)
 # train_vit(df, "map_type", images_path, hparams, test_set_number=test_set_number)
 # train_vivit(df, 'map_type', images_path, hparams, test_set_number=test_set_number)
-train_ensemble(df, 'map_type', images_path, hparams, test_set_number=test_set_number)
+train_vit_ensemble(df, 'map_type', images_path, hparams, test_set_number=test_set_number)
+train_vivit_ensemble(df, 'map_type', images_path, hparams, test_set_number=test_set_number)

@@ -91,7 +91,7 @@ def train_xgb(df, split_type, test_set_number=None):
     run.summary['coverage_runtime'] = np.array(runs)
         
 
-def train_ensemble(df, split_type, images_path, hparams, test_set_number):
+def train_vit_ensemble(df, split_type, images_path, hparams, test_set_number):
     run = wandb.init(
     # Set the project where this run will be logged
     project="MAPF-ViT",
@@ -189,24 +189,106 @@ def train_ensemble(df, split_type, images_path, hparams, test_set_number):
             run.log(validation_metrics, commit=True)
 
         
-#         accuracy = calc_fastest(preds, torch.tensor(test_df.Y.tolist()))
-#         coverage = calc_coverage(preds, torch.from_numpy(test_df.loc[:, success_order].values.astype(np.int64)))
-#         coverage_runtime = calc_coverage_runtime(preds, torch.from_numpy(test_df.loc[:, runtime_order].values.astype(np.int64)))
-#
-#         accs.append(accuracy)
-#         covs.append(coverage)
-#         runs.append(coverage_runtime)
-#
-#     run.log({
-#         "eval/accuracy": accuracy,
-#         "eval/coverage": coverage,
-#         "eval/coverage runtime": coverage_runtime,
-#     })
+def train_vivit_ensemble(df, split_type, images_path, hparams, test_set_number=None):
+    run = wandb.init(
+    # Set the project where this run will be logged
+    project="MAPF-ViT",
+    # Track hyperparameters and run metadata
+    tags=['Ensemble-ViViT'])
+
+    success_order = ['sat Success', 'icts Success', 'cbsh-c Success', 'lazycbs Success', 'epea Success']
+    runtime_order = ['sat Runtime', 'icts Runtime', 'cbsh-c Runtime', 'lazycbs Runtime', 'epea Runtime']
+
+    feature_columns = ['GridColumns', 'GridRows', 'GridSize', 'NumOfObstacles', 'ObstacleDensity',
+       'AvgDistanceToGoal', 'MaxDistanceToGoal', 'MinDistanceToGoal',
+       'AvgStartDistances', 'AvgGoalDistances', 'PointsAtSPRatio', 'Sparsity',
+       '2waycollisions', 'StdDistanceToGoal', 'MaxStartDistances',
+       'MaxGoalDistances', 'MinStartDistances', 'MinGoalDistances',
+       'StdStartDistances', 'StdGoalDistances']
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    train_transforms = transforms.Compose(
+    [
+        transforms.Resize((hparams["image_size"], hparams["image_size"]), antialias=True),
+        transforms.Normalize(mean=[0, 0, 0], std=[1, 1, 1]),
+    ]
+    )
+
+    validation_transforms = transforms.Compose(
+        [
+            transforms.Resize((hparams["image_size"], hparams["image_size"]), antialias=True),
+            transforms.Normalize(mean=[0, 0, 0], std=[1, 1, 1]),
+        ]
+    )
+
+    for i, (train_df, test_df, name) in enumerate(get_split(df, split_type, test_set_number)):
+
+        # Train XGBoost model
+
+        clf = XGBClassifier(objective='multi:softmax', n_jobs=-1,
+                            callbacks=[WandbCallback(log_model=True,
+                                                     log_feature_importance=True)])
+
+        run.tags  = run.tags + (name[0], )
+
+        xgb_train = train_df.copy()
+        xgb_test = test_df.copy()
+        xgb_train.Y = xgb_train.Y.apply(lambda alg: alg2label[alg])
+        xgb_test.Y = xgb_test.Y.apply(lambda alg: alg2label[alg])
+        clf.fit(xgb_train[feature_columns], xgb_train.Y)
+
+        xgb_preds = torch.from_numpy(clf.predict_proba(xgb_test[feature_columns]))
+
+        # Train ViViT model
+
+        train_data = ViViTMAPFDataset(images_path, train_df, transform=train_transforms)
+        val_data = ViViTMAPFDataset(images_path, test_df, transform=validation_transforms)
+
+        train_loader = DataLoader(dataset=train_data, batch_size=1, shuffle=True)
+        valid_loader = DataLoader(dataset=val_data, batch_size=1, shuffle=False)
+
+        run.tags  = run.tags + (name[0], images_path.split('/')[-1])
+
+        print(f'train data len: {len(train_data)}')
+        print(f'test data len: {len(val_data)}')
+        print(f'train loader len: {len(train_loader)}')
+        print(f'test loader len: {len(valid_loader)}')
+
+        model = ViVit(
+            image_size = hparams["image_size"],
+            image_patch_size = hparams["patch_size"],
+            num_classes = len(alg2label.keys()),
+            dim = hparams["dim"],
+            spatial_depth = hparams["depth"],
+            heads = hparams["heads"],
+            mlp_dim = hparams["mlp_dim"],
+            frames = 512,
+            frame_patch_size = hparams["frame_patch_size"],
+            temporal_depth = hparams["temporal_depth"],
+        ).to(device)
+
+        model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f'ViViT parameters: {model_params}')
+
+        # loss function
+        criterion = nn.CrossEntropyLoss()
+        # optimizer
+        optimizer = optim.Adam(model.parameters(), lr=hparams["lr"])
+        # scheduler
+        # scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
+
+        for epoch in range(hparams["epochs"]):
+            train_metrics = train_one_epoch(model, criterion, optimizer, train_loader, device, accumulation_steps=hparams["batch_size"])
+
+            validation_metrics = ensemble_validation_step(model, criterion, valid_loader, device, xgb_preds)
 
 
-    run.summary['accuracy'] = np.array(accs)
-    run.summary['coverage'] = np.array(covs)
-    run.summary['coverage_runtime'] = np.array(runs)
+            print(f"{train_metrics=}")
+            print(f"{validation_metrics=}")
+
+            run.log(train_metrics, commit=False)
+            run.log(validation_metrics, commit=True)
 
 def train_vit(df, split_type, images_path, hparams, test_set_number=None):
     run = wandb.init(
